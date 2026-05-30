@@ -30,13 +30,78 @@ function formatDateTime(value) {
   })
 }
 
+function statusConfig(statusRaw) {
+  const status = String(statusRaw || 'IN').toUpperCase()
+
+  if (status === 'OUT') {
+    return {
+      label: 'OUT',
+      badge: 'bg-red-500/15 text-red-400',
+      accent: 'text-red-400',
+    }
+  }
+
+  if (status === 'EXPIRED') {
+    return {
+      label: 'EXPIRED',
+      badge: 'bg-orange-500/15 text-orange-400',
+      accent: 'text-orange-400',
+    }
+  }
+
+  if (status === 'VOID') {
+    return {
+      label: 'VOID',
+      badge: 'bg-zinc-500/15 text-zinc-400',
+      accent: 'text-zinc-400',
+    }
+  }
+
+  if (status === 'BROKEN') {
+    return {
+      label: 'BROKEN',
+      badge: 'bg-orange-700/15 text-orange-300',
+      accent: 'text-orange-300',
+    }
+  }
+
+  return {
+    label: 'ACTIVE / IN',
+    badge: 'bg-emerald-500/15 text-emerald-400',
+    accent: 'text-emerald-400',
+  }
+}
+
 export default async function CertificatePage({ params }) {
   const resolvedParams = await params
   const token = resolvedParams?.token
 
   const { data: bottle, error } = await supabase
     .from('bottles')
-    .select('*')
+    .select(`
+      id,
+      branch_id,
+      item_code,
+      qr_token,
+      customer_name,
+      category_name,
+      item_name,
+      volume_ml,
+      lot_no,
+      note,
+      photo_url,
+      pdf_url,
+      certificate_url,
+      status,
+      created_by,
+      created_at,
+      keeping_date,
+      expired_date,
+      pic_name,
+      stock_out_at,
+      branch_name,
+      stock_out_by
+    `)
     .eq('qr_token', token)
     .maybeSingle()
 
@@ -45,7 +110,7 @@ export default async function CertificatePage({ params }) {
   if (bottle?.id) {
     const { data } = await supabase
       .from('bottle_histories')
-      .select('*')
+      .select('id, bottle_id, branch_id, type, description, created_by, created_at')
       .eq('bottle_id', bottle.id)
       .order('created_at', { ascending: true })
 
@@ -63,15 +128,15 @@ export default async function CertificatePage({ params }) {
             QR token tidak ditemukan di database.
           </p>
           <p className="mt-4 break-all text-xs text-zinc-600">
-            {token}
+            {token || '-'}
           </p>
         </div>
       </main>
     )
   }
 
-  const status = (bottle.status || 'IN').toUpperCase()
-  const isOut = status === 'OUT'
+  const status = statusConfig(bottle.status)
+  const branchName = bottle.branch_name || '-'
 
   return (
     <main className="min-h-screen bg-[#050505] text-white px-4 py-8">
@@ -84,7 +149,7 @@ export default async function CertificatePage({ params }) {
             SIGNATURE FAMILY KARAOKE
           </div>
           <div className="mt-2 text-sm font-black text-white">
-            {bottle.branch_name || 'TANJUNG DUREN'}
+            {branchName}
           </div>
         </div>
 
@@ -94,14 +159,8 @@ export default async function CertificatePage({ params }) {
               <span className="text-xs font-bold uppercase text-zinc-500">
                 Foto Botol / Barang
               </span>
-              <span
-                className={`rounded-full px-3 py-1 text-xs font-black ${
-                  isOut
-                    ? 'bg-red-500/15 text-red-400'
-                    : 'bg-emerald-500/15 text-emerald-400'
-                }`}
-              >
-                {isOut ? 'OUT' : 'ACTIVE / IN'}
+              <span className={`rounded-full px-3 py-1 text-xs font-black ${status.badge}`}>
+                {status.label}
               </span>
             </div>
 
@@ -134,22 +193,23 @@ export default async function CertificatePage({ params }) {
                   MASTERPIECE
                 </div>
                 <div className="text-sm font-black">
-                  {bottle.branch_name || 'TANJUNG DUREN'}
+                  {branchName}
                 </div>
               </div>
             </div>
 
             <div className="mt-6 space-y-3 text-[15px]">
               <Info label="Customer Name" value={bottle.customer_name} />
+              <Info label="Jenis Minuman" value={bottle.category_name} />
               <Info label="Item / Minuman" value={bottle.item_name} />
-              <Info label="Category" value={bottle.category_name} />
               <Info label="Volume" value={`${bottle.volume_ml || '-'} ML`} />
-              <Info label="Stock In Date" value={formatDate(bottle.keeping_date || bottle.created_at)} />
+              <Info label="Keeping Date" value={formatDate(bottle.keeping_date || bottle.created_at)} />
               <Info label="Stock Out Date" value={formatDate(bottle.stock_out_at)} />
               <Info label="Expired Date" value={formatDate(bottle.expired_date)} />
               <Info label="PIC" value={bottle.pic_name} />
               <Info label="Lot No" value={bottle.lot_no} />
-              <Info label="Status" value={isOut ? 'OUT' : 'IN / ACTIVE'} />
+              <Info label="Status" value={status.label} />
+              <Info label="Notes" value={bottle.note} />
             </div>
           </div>
         </div>
@@ -172,11 +232,24 @@ export default async function CertificatePage({ params }) {
                 >
                   <b className="text-white">{formatDateTime(h.created_at)}</b>
                   <span className="mx-2 text-zinc-600">-</span>
-                  {h.note || h.description || h.type || 'Activity'}
+                  <span className="font-black text-[#D4A64A]">
+                    {h.type || 'ACTIVITY'}
+                  </span>
+                  <span className="mx-2 text-zinc-600">•</span>
+                  {h.description || 'Activity'}
                 </div>
               ))
             )}
           </div>
+        </div>
+
+        <div className="mt-6 rounded-3xl border border-white/10 bg-black/40 p-5">
+          <h2 className="text-lg font-black text-[#D4A64A]">
+            Certificate Link
+          </h2>
+          <p className="mt-3 break-all text-sm text-zinc-400">
+            {bottle.certificate_url || `https://masterpiece-certificate.vercel.app/c/${bottle.qr_token}`}
+          </p>
         </div>
 
         <div className="mt-6 flex flex-col gap-3 md:flex-row">
@@ -184,6 +257,7 @@ export default async function CertificatePage({ params }) {
             <a
               href={bottle.pdf_url}
               target="_blank"
+              rel="noreferrer"
               className="flex-1 rounded-2xl bg-[#D4A64A] px-5 py-4 text-center font-black text-black"
             >
               DOWNLOAD PDF
